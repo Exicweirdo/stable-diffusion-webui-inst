@@ -427,7 +427,7 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
         os.makedirs(images_embeds_dir, exist_ok=True)
     else:
         images_embeds_dir = None
-
+    #instance of StableDiffusionModelHijack
     hijack = sd_hijack.model_hijack
 
     embedding = hijack.embedding_db.word_embeddings[embedding_name]
@@ -452,7 +452,7 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
         tensorboard_writer = tensorboard_setup(log_directory)
 
     pin_memory = shared.opts.pin_memory
-
+    #prepare dataset
     ds = modules.textual_inversion.dataset.PersonalizedBase(data_root=data_root, width=training_width, height=training_height, repeats=shared.opts.training_image_repeats_per_epoch, placeholder_token=embedding_name, model=shared.sd_model, cond_model=shared.sd_model.cond_stage_model, device=devices.device, template_file=template_file, batch_size=batch_size, gradient_step=gradient_step, shuffle_tags=shuffle_tags, tag_drop_out=tag_drop_out, latent_sampling_method=latent_sampling_method, varsize=varsize, use_weight=use_weight)
 
     if shared.opts.save_training_settings_to_txt:
@@ -466,6 +466,8 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
         shared.parallel_processing_allowed = False
         shared.sd_model.first_stage_model.to(devices.cpu)
 
+    #embedding.vec should be embedding.vec(style_image)
+    #Thus here embedding.model.parameters() should require_grad=True @TODO
     embedding.vec.requires_grad = True
     optimizer = torch.optim.AdamW([embedding.vec], lr=scheduler.learn_rate, weight_decay=0.0)
     if shared.opts.save_optimizer_state:
@@ -525,6 +527,7 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
                     x = batch.latent_sample.to(devices.device, non_blocking=pin_memory)
                     if use_weight:
                         w = batch.weight.to(devices.device, non_blocking=pin_memory)
+                    #should be a new c from both cond_text and style_image @TODO
                     c = shared.sd_model.cond_stage_model(batch.cond_text)
 
                     if is_training_inpainting_model:

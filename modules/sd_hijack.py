@@ -351,6 +351,8 @@ class EmbeddingsWithFixes(torch.nn.Module):
             return inputs_embeds
 
         vecs = []
+        # @TODO modify fixes
+        #add input style image
         for fixes, tensor in zip(batch_fixes, inputs_embeds):
             for offset, embedding in fixes:
                 vec = embedding.vec[self.textual_inversion_key] if isinstance(embedding.vec, dict) else embedding.vec
