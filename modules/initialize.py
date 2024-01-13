@@ -166,3 +166,7 @@ def initialize_rest(*, reload_script_modules=False):
     extra_networks.initialize()
     extra_networks.register_default_extra_networks()
     startup_timer.record("initialize extra networks")
+    
+    from modules.textual_inversion.attnmodel import FrozenCLIPVisionencoder
+    
+    shared.clipvision_model = FrozenCLIPVisionencoder(device=shared.device)

@@ -1,10 +1,10 @@
 ### Attention model
 import numpy as np
+import torch
 from torch import nn
 from modules.attention import CrossAttention
 from transformers import CLIPVisionModelWithProjection, AutoProcessor
 from modules import shared, devices
-
 
 class Attentions(nn.Module):
     def __init__(self, dim, n_heads, d_head, dropout=0., context_dim=None, gated_ff=True, checkpoint=True):
@@ -37,5 +37,7 @@ class FrozenCLIPVisionencoder:
         for param in self.encoder.parameters():
             param.requires_grad = False
             
-    def encode(self, images):
-        self.processor()
+    def encode(self, images : torch.Tensor) -> torch.Tensor:
+        rescaled_imgs = (images + 1) / 2
+        input_img = self.processor(images=[rescaled_imgs[i,:,:,:] for i in range(images.shape[0])], return_tensors="pt").pixel_values
+        return self.encoder(input_img.to(self.device)).image_embeds # (batch_size, 768)

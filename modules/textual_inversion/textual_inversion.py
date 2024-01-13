@@ -12,6 +12,7 @@ import safetensors.torch
 import numpy as np
 from PIL import Image, PngImagePlugin
 from torch.utils.tensorboard import SummaryWriter
+from torch.nn import ModuleList
 
 from modules import shared, devices, sd_hijack, sd_models, images, sd_samplers, sd_hijack_checkpoint, errors, hashes
 import modules.textual_inversion.dataset
@@ -92,12 +93,15 @@ class Embedding:
 class EmbeddingWithAttention(Embedding):
     def __init__(self, vec, name, step=None):
         super().__init__(vec, name, step)
-        self.attention : Attentions = None
+        self.attentions : ModuleList[Attentions] = None
         #CLIP tokenization
         self.is_clip = True
         token_dim = 768
         #@TODO figure out how to control num vector per token
-        self.attention = Attentions(dim=token_dim, n_heads=8, d_head=64, dropout = 0.05)
+        self.vectors = self.vec.shape[0]
+        self.attentions = ModuleList([
+            Attentions(token_dim, n_heads=8, d_head=64, dropout=0.1, context_dim=None, gated_ff=True, checkpoint=True).to(shared.device) for _ in range(self.vectors)
+        ])
     def save(self, filename):
         embedding_data = {
             "string_to_token": {"*": 265},
@@ -105,8 +109,8 @@ class EmbeddingWithAttention(Embedding):
             "step": self.step,
             "sd_checkpoint": self.sd_checkpoint,
             "sd_checkpoint_name": self.sd_checkpoint_name,
-            "embedding_attention": self.attention.state_dict(),
-            "deprecated_vec": self.vec,
+            "embedding_attention": self.attentions.state_dict(),
+            "output_vec": self.vec,
         }
 
         torch.save(embedding_data, filename)
@@ -118,11 +122,31 @@ class EmbeddingWithAttention(Embedding):
             }
             torch.save(optimizer_saved_dict, f"{filename}.optim")
 
-    def set_attention(self, attention):
-        self.attention = attention
+    def train(self):
+        for param in self.attentions.parameters():
+            param.requires_grad = True
+        for attention in self.attentions:
+            attention.train()
+    
+    def eval(self):
+        for param in self.attentions.parameters():
+            param.requires_grad = False
+        for attention in self.attentions:
+            attention.eval()
+    
+    def get_attentions(self):
+        return self.attentions
+    
+    """ def calculate_vec(self, image_embeds : torch.Tensor = None):
+        self.vec = torch.concat([attention(image_embeds).unsqueeze(1) for attention in self.attentions], dim=1)
+        return self.vec """
+    def calculate_vec(self, image_embeds : torch.Tensor):
 
-    def get_attention(self):
-        return self.attention
+        self.vec = torch.cat([
+            attention(image_embeds.unsqueeze(1)) for attention in self.attentions
+        ], dim=0).squeeze(1)
+        #print("vec.shape: ", self.vec.shape)
+        return self.vec
 #########################################################
 
 class DirWithTextualInversionEmbeddings:
@@ -369,11 +393,11 @@ def create_embedding_from_data(data, name, filename='unknown embedding file', fi
     ###########################################################
     elif "embedding_attention" in data: # textual inversion embeddings with attention
         param_dict = data['embedding_attention']
-        vec = data["deprecated_vec"].detach().to(devices.device, dtype=torch.float32)
+        vec = data["output_vec"].detach().to(devices.device, dtype=torch.float32)
         shape = vec.shape[-1]
         vectors = vec.shape[0]
         embedding = EmbeddingWithAttention(vec, name)
-        embedding.attention.load_state_dict(param_dict)
+        embedding.attentions.load_state_dict(param_dict)
         embedding.step = data.get('step', None)
         embedding.sd_checkpoint = data.get('sd_checkpoint', None)
         embedding.sd_checkpoint_name = data.get('sd_checkpoint_name', None)
@@ -382,7 +406,7 @@ def create_embedding_from_data(data, name, filename='unknown embedding file', fi
         if filepath:
             embedding.filename = filepath
             embedding.set_hash(hashes.sha256(filepath, "textual_inversion/" + name) or '')
-        print("creat InST embedding from data")
+        #print("creat InST embedding from data")
         return embedding
     ###########################################################
     else:
@@ -551,8 +575,13 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
 
     #embedding.vec should be embedding.vec(style_image)
     #Thus here embedding.model.parameters() should require_grad=True @TODO
-    embedding.vec.requires_grad = True
-    optimizer = torch.optim.AdamW([embedding.vec], lr=scheduler.learn_rate, weight_decay=0.0)
+    if not isinstance(embedding, EmbeddingWithAttention):
+        embedding.vec.requires_grad = True
+        optimizer = torch.optim.AdamW([embedding.vec], lr=scheduler.learn_rate, weight_decay=0.0)
+    else:
+        embedding.attentions.train()
+        optimizer = torch.optim.AdamW(embedding.attentions.parameters(), lr=scheduler.learn_rate, weight_decay=0.0)
+        
     if shared.opts.save_optimizer_state:
         optimizer_state_dict = None
         if os.path.exists(f"{filename}.optim"):
@@ -607,6 +636,14 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
                     clip_grad_sched.step(embedding.step)
 
                 with devices.autocast():
+                    #######################################
+                    if isinstance(embedding, EmbeddingWithAttention):
+                        #print("pixel values.shape: ", batch.pixel_values.shape)
+                        imgs = batch.pixel_values.to(devices.device, non_blocking=pin_memory)
+                        styleimg = imgs[0]
+                        img_embed = shared.clipvision_model.encode(styleimg.unsqueeze(0))
+                        embedding.calculate_vec(img_embed)
+                    #######################################
                     x = batch.latent_sample.to(devices.device, non_blocking=pin_memory)
                     if use_weight:
                         w = batch.weight.to(devices.device, non_blocking=pin_memory)

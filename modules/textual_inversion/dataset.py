@@ -131,6 +131,7 @@ class PersonalizedBase(Dataset):
                 with devices.autocast():
                     entry.cond = cond_model([entry.cond_text]).to(devices.cpu).squeeze(0)
             groups[image.size].append(len(self.dataset))
+            entry.pixel_values = torchdata #add to calc vec for EmbeddingWithAttention
             self.dataset.append(entry)
             del torchdata
             del latent_dist
@@ -221,6 +222,7 @@ class BatchLoader:
         self.cond_text = [entry.cond_text for entry in data]
         self.cond = [entry.cond for entry in data]
         self.latent_sample = torch.stack([entry.latent_sample for entry in data]).squeeze(1)
+        self.pixel_values = torch.stack([entry.pixel_values for entry in data]).squeeze(1)
         if all(entry.weight is not None for entry in data):
             self.weight = torch.stack([entry.weight for entry in data]).squeeze(1)
         else:

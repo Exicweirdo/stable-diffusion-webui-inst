@@ -199,7 +199,7 @@ class FrozenCLIPEmbedderWithCustomWordsBase(torch.nn.Module):
 
         return batch_chunks, token_count
 
-    def forward(self, texts):
+    def forward(self, texts, input_imgs : torch.Tensor = None):
         """
         Accepts an array of texts; Passes texts through transformers network to create a tensor with numerical representation of those texts.
         Returns a tensor with shape of (B, T, C), where B is length of the array; T is length, in tokens, of texts (including padding) - T will
@@ -213,7 +213,7 @@ class FrozenCLIPEmbedderWithCustomWordsBase(torch.nn.Module):
         if opts.use_old_emphasis_implementation:
             import modules.sd_hijack_clip_old
             return modules.sd_hijack_clip_old.forward_old(self, texts)
-
+        
         batch_chunks, token_count = self.process_texts(texts)
 
         used_embeddings = {}
