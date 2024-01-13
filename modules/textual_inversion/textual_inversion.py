@@ -19,7 +19,7 @@ from modules.textual_inversion.learn_schedule import LearnRateScheduler
 
 from modules.textual_inversion.image_embedding import embedding_to_b64, embedding_from_b64, insert_image_data_embed, extract_image_data_embed, caption_image_overlay
 from modules.textual_inversion.logging import save_settings_to_file
-
+from modules.textual_inversion.attnmodel import Attentions
 
 TextualInversionTemplate = namedtuple("TextualInversionTemplate", ["name", "path"])
 textual_inversion_templates = {}
@@ -88,6 +88,42 @@ class Embedding:
         self.hash = v
         self.shorthash = self.hash[0:12]
 
+#########################################################
+class EmbeddingWithAttention(Embedding):
+    def __init__(self, vec, name, step=None):
+        super().__init__(vec, name, step)
+        self.attention : Attentions = None
+        #CLIP tokenization
+        self.is_clip = True
+        token_dim = 768
+        #@TODO figure out how to control num vector per token
+        self.attention = Attentions(dim=token_dim, n_heads=8, d_head=64, dropout = 0.05)
+    def save(self, filename):
+        embedding_data = {
+            "string_to_token": {"*": 265},
+            "name": self.name,
+            "step": self.step,
+            "sd_checkpoint": self.sd_checkpoint,
+            "sd_checkpoint_name": self.sd_checkpoint_name,
+            "embedding_attention": self.attention.state_dict(),
+            "deprecated_vec": self.vec,
+        }
+
+        torch.save(embedding_data, filename)
+
+        if shared.opts.save_optimizer_state and self.optimizer_state_dict is not None:
+            optimizer_saved_dict = {
+                'hash': self.checksum(),
+                'optimizer_state_dict': self.optimizer_state_dict,
+            }
+            torch.save(optimizer_saved_dict, f"{filename}.optim")
+
+    def set_attention(self, attention):
+        self.attention = attention
+
+    def get_attention(self):
+        return self.attention
+#########################################################
 
 class DirWithTextualInversionEmbeddings:
     def __init__(self, path):
@@ -278,7 +314,35 @@ def create_embedding(name, num_vectors_per_token, overwrite_old, init_text='*'):
     embedding.save(fn)
 
     return fn
+#########################################################
+def create_embedding_with_attention(name, num_vectors_per_token, overwrite_old, init_text='*'):
+    cond_model = shared.sd_model.cond_stage_model
 
+    with devices.autocast():
+        cond_model([""])  # will send cond model to GPU if lowvram/medvram is active
+
+    #cond_model expects at least some text, so we provide '*' as backup.
+    embedded = cond_model.encode_embedding_init_text(init_text or '*', num_vectors_per_token)
+    vec = torch.zeros((num_vectors_per_token, embedded.shape[1]), device=devices.device)
+
+    #Only copy if we provided an init_text, otherwise keep vectors as zeros
+    #has no effect on attention
+    if init_text:
+        for i in range(num_vectors_per_token):
+            vec[i] = embedded[i * int(embedded.shape[0]) // num_vectors_per_token]
+
+    # Remove illegal characters from name.
+    name = "".join( x for x in name if (x.isalnum() or x in "._- "))
+    fn = os.path.join(shared.cmd_opts.embeddings_dir, f"{name}.pt")
+    if not overwrite_old:
+        assert not os.path.exists(fn), f"file {fn} already exists"
+
+    embedding = EmbeddingWithAttention(vec, name)
+    embedding.step = 0
+    embedding.save(fn)
+
+    return fn
+#########################################################
 
 def create_embedding_from_data(data, name, filename='unknown embedding file', filepath=None):
     if 'string_to_param' in data:  # textual inversion embeddings
@@ -302,6 +366,25 @@ def create_embedding_from_data(data, name, filename='unknown embedding file', fi
         vec = emb.detach().to(devices.device, dtype=torch.float32)
         shape = vec.shape[-1]
         vectors = vec.shape[0]
+    ###########################################################
+    elif "embedding_attention" in data: # textual inversion embeddings with attention
+        param_dict = data['embedding_attention']
+        vec = data["deprecated_vec"].detach().to(devices.device, dtype=torch.float32)
+        shape = vec.shape[-1]
+        vectors = vec.shape[0]
+        embedding = EmbeddingWithAttention(vec, name)
+        embedding.attention.load_state_dict(param_dict)
+        embedding.step = data.get('step', None)
+        embedding.sd_checkpoint = data.get('sd_checkpoint', None)
+        embedding.sd_checkpoint_name = data.get('sd_checkpoint_name', None)
+        embedding.vectors = vectors
+        embedding.shape = shape
+        if filepath:
+            embedding.filename = filepath
+            embedding.set_hash(hashes.sha256(filepath, "textual_inversion/" + name) or '')
+        print("creat InST embedding from data")
+        return embedding
+    ###########################################################
     else:
         raise Exception(f"Couldn't identify {filename} as neither textual inversion embedding nor diffuser concept.")
 

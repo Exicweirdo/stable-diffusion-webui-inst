@@ -6,8 +6,13 @@ import modules.textual_inversion.textual_inversion
 from modules import sd_hijack, shared
 
 
-def create_embedding(name, initialization_text, nvpt, overwrite_old):
-    filename = modules.textual_inversion.textual_inversion.create_embedding(name, nvpt, overwrite_old, init_text=initialization_text)
+def create_embedding(name, initialization_text, nvpt, overwrite_old, embedding_type = "classical"):
+    if embedding_type == "classical":
+        filename = modules.textual_inversion.textual_inversion.create_embedding(name, nvpt, overwrite_old, init_text=initialization_text)
+    elif embedding_type == "InST":
+        filename = modules.textual_inversion.textual_inversion.create_embedding_with_attention(name, nvpt, overwrite_old, init_text=initialization_text)
+    else:
+        raise ValueError(f"Unknown embedding type {embedding_type}, must be 'classical' or 'InST'")
 
     sd_hijack.model_hijack.embedding_db.load_textual_inversion_embeddings()
 

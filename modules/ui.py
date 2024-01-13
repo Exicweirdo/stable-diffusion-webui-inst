@@ -882,6 +882,7 @@ def create_ui():
             with gr.Tabs(elem_id="train_tabs"):
 
                 with gr.Tab(label="Create embedding", id="create_embedding"):
+                    new_embedding_type = gr.Radio(choices=["classical", "InST"], value="classical", label="embedding type", elem_id="train_new_embedding_type")
                     new_embedding_name = gr.Textbox(label="Name", elem_id="train_new_embedding_name")
                     initialization_text = gr.Textbox(label="Initialization text", value="*", elem_id="train_initialization_text")
                     nvpt = gr.Slider(label="Number of vectors per token", minimum=1, maximum=75, step=1, value=1, elem_id="train_nvpt")
@@ -984,6 +985,7 @@ def create_ui():
                 initialization_text,
                 nvpt,
                 overwrite_old_embedding,
+                new_embedding_type,
             ],
             outputs=[
                 train_embedding_name,
