@@ -17,7 +17,8 @@ def find_noise_for_image(p, cond, uncond, cfg_scale, strength):
     x_in = torch.cat([x] * 2)
 
     t_enc = int(strength * 1000)
-    x_noisy = shared.sd_model.q_sample(x_start=x, t=t_enc)
+    t_enc = torch.tensor([t_enc], dtype=torch.long, device=x.device)
+    x_noisy = shared.sd_model.q_sample(x_start=x_in, t=t_enc)
     cond_in = torch.cat([uncond, cond])
     image_conditioning = torch.cat([p.image_conditioning] * 2)
     cond_in = {"c_concat": [image_conditioning], "c_crossattn": [cond_in]}
@@ -70,18 +71,12 @@ class Script(scripts.Script):
         )
 
         strength = gr.Slider(
-            label="Strenght",
+            label="Strength",
             minimum=0,
             maximum=1,
             step=0.01,
             value=0.4,
             elem_id=self.elem_id("strength"),
-        )
-
-        override_strength = gr.Checkbox(
-            label="Override `Denoising strength` to `Strength`?",
-            value=True,
-            elem_id=self.elem_id("override_strength"),
         )
 
         cfg = gr.Slider(
@@ -105,7 +100,6 @@ class Script(scripts.Script):
             info,
             override_sampler,
             strength,
-            override_strength,
             cfg,
             randomness,
         ]
@@ -116,15 +110,12 @@ class Script(scripts.Script):
         _,
         override_sampler,
         strength,
-        override_strength,
         cfg,
         randomness,
     ):
         # Override
         if override_sampler:
             p.sampler_name = "Euler"
-        if override_strength:
-            p.denoising_strength = strength
 
         def sample_extra(
             conditioning,
@@ -152,10 +143,10 @@ class Script(scripts.Script):
             else:
                 shared.state.job_count += 1
                 cond = p.sd_model.get_learned_conditioning(
-                    p.batch_size * [original_prompt]
+                    p.batch_size * [p.prompt]
                 )
                 uncond = p.sd_model.get_learned_conditioning(
-                    p.batch_size * [original_negative_prompt]
+                    p.batch_size * [p.negative_prompt]
                 )
                 rec_noise = find_noise_for_image(p, cond, uncond, cfg, strength)
                 self.cache = Cached(
