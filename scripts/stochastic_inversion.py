@@ -7,7 +7,13 @@ import modules.scripts as scripts
 import gradio as gr
 from modules.ui_common import create_refresh_button
 
-from modules import processing, shared, sd_samplers, sd_samplers_common
+from modules import (
+    processing,
+    shared,
+    sd_samplers,
+    sd_samplers_common,
+    script_callbacks,
+)
 
 from modules.sd_hijack import model_hijack
 
@@ -46,9 +52,6 @@ Cached = namedtuple(
         "cfg_scale",
         "strength",
         "latent",
-        "input_img",
-        "embedding_name",
-        "embedding_vec",
     ],
 )
 
@@ -102,41 +105,12 @@ class Script(scripts.Script):
             elem_id=self.elem_id("randomness"),
         )
 
-        with gr.Accordion("InST Embedding Vector", open=False):
-            input_img = gr.Image(
-                label="Input image",
-                sources=["upload", "clipboard"],
-                image_mode="RGB",
-                interactive=True,
-                elem_id=self.elem_id("input_img"),
-            )
-            embedding_name = gr.Dropdown(
-                label="Embedding",
-                elem_id=self.elem_id("embedding_name"),
-                choices=sorted(model_hijack.embedding_db.word_embeddings.keys()),
-            )
-            create_refresh_button(
-                embedding_name,
-                model_hijack.embedding_db.load_textual_inversion_embeddings,
-                lambda: {
-                    "choices": sorted(model_hijack.embedding_db.word_embeddings.keys())
-                },
-                self.elem_id("refresh_embedding_name"),
-            )
-            calc_vec = gr.Button(
-                label="Calculate embedding vector",
-                elem_id=self.elem_id("calc_vec"),
-            )
-
         return [
             info,
             override_sampler,
             strength,
             cfg,
             randomness,
-            input_img,
-            embedding_name,
-            calc_vec
         ]
 
     def run(
@@ -154,15 +128,6 @@ class Script(scripts.Script):
         # Override
         if override_sampler:
             p.sampler_name = "Euler"
-        embedding_vec = None
-        """calc_vec.click(
-            model_hijack.embedding_db.recalculate_embedding_vector_by_name,
-            inputs=[embedding_name, input_img],
-            outputs=[embedding_vec],
-            show_progress=False,
-        )"""
-        input_img = torch.from_numpy(input_img) / 255.0
-        model_hijack.embedding_db.recalculate_embedding_vector_by_name(embedding_name, input_img)
 
         def sample_extra(
             conditioning,
@@ -250,3 +215,45 @@ class Script(scripts.Script):
         processed = processing.process_images(p)
 
         return processed
+
+
+def on_ui_tabs():
+    with gr.Blocks(analytics_enabled=False) as ui_component:
+        input_img = gr.Image(
+            label="Input image",
+            sources=["upload", "clipboard"],
+            image_mode="RGB",
+            interactive=True,
+            elem_id=self.elem_id("input_img"),
+        )
+        with gr.Row():
+            embedding_name = gr.Dropdown(
+                label="Embedding",
+                elem_id=self.elem_id("embedding_name"),
+                choices=sorted(model_hijack.embedding_db.word_embeddings.keys()),
+            )
+            create_refresh_button(
+                embedding_name,
+                model_hijack.embedding_db.load_textual_inversion_embeddings,
+                lambda: {
+                    "choices": sorted(model_hijack.embedding_db.word_embeddings.keys())
+                },
+                self.elem_id("refresh_embedding_name"),
+            )
+        calc_vec = gr.Button(
+            label="Calculate embedding vector",
+            elem_id=self.elem_id("calc_vec"),
+        )
+        embedding_vec = None
+        input_img = torch.from_numpy(input_img) / 255.0
+        calc_vec.click(
+            model_hijack.embedding_db.recalculate_embedding_vector_by_name,
+            inputs=[embedding_name, input_img],
+            outputs=[embedding_vec],
+            show_progress=False,
+        )
+
+        return [(ui_component, "InST Embedding", "extension_template_tab")]
+
+
+script_callbacks.on_ui_tabs(on_ui_tabs)
