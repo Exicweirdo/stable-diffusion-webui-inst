@@ -41,7 +41,15 @@ def find_noise_for_image(p, cond, uncond, cfg_scale, strength):
 
 Cached = namedtuple(
     "Cached",
-    ["noise", "cfg_scale", "strength", "latent", "input_img", "embedding_name"],
+    [
+        "noise",
+        "cfg_scale",
+        "strength",
+        "latent",
+        "input_img",
+        "embedding_name",
+        "embedding_vec",
+    ],
 )
 
 
@@ -93,28 +101,39 @@ class Script(scripts.Script):
             value=0.0,
             elem_id=self.elem_id("randomness"),
         )
-        input_img = gr.Image(
-            label="Input image",
-            sources=["upload", "clipboard"],
-            image_mode="RGB",
-            interactive=True,
-            elem_id=self.elem_id("input_img"),
-        )
-        embedding_name = gr.Dropdown(
-            label="Embedding",
-            elem_id="train_embedding",
-            choices=sorted(model_hijack.embedding_db.word_embeddings.keys()),
-        )
-        create_refresh_button(
-            embedding_name,
-            model_hijack.embedding_db.load_textual_inversion_embeddings,
-            lambda: {
-                "choices": sorted(
-                    sd_hijack.model_hijack.embedding_db.word_embeddings.keys()
-                )
-            },
-            "refresh_train_embedding_name",
-        )
+
+        with gr.Accordion("InST Embedding Vector", open=False):
+            input_img = gr.Image(
+                label="Input image",
+                sources=["upload", "clipboard"],
+                image_mode="RGB",
+                interactive=True,
+                elem_id=self.elem_id("input_img"),
+            )
+            embedding_name = gr.Dropdown(
+                label="Embedding",
+                elem_id=self.elem_id("embedding_name"),
+                choices=sorted(model_hijack.embedding_db.word_embeddings.keys()),
+            )
+            create_refresh_button(
+                embedding_name,
+                model_hijack.embedding_db.load_textual_inversion_embeddings,
+                lambda: {
+                    "choices": sorted(model_hijack.embedding_db.word_embeddings.keys())
+                },
+                self.elem_id("refresh_embedding_name"),
+            )
+            calc_vec = gr.Button(
+                label="Calculate embedding vector",
+                elem_id=self.elem_id("calc_vec"),
+            )
+            embedding_vec = None
+            calc_vec.click(
+                model_hijack.embedding_db.recalculate_embedding_vector_by_name,
+                inputs=[embedding_name, input_img],
+                outputs=[embedding_vec],
+                show_progress=False,
+            )
 
         return [
             info,
@@ -166,9 +185,9 @@ class Script(scripts.Script):
                 rec_noise = self.cache.noise
             else:
                 shared.state.job_count += 1
-                model_hijack.embedding_db.recalculate_embedding_vector_by_name(
-                    embedding_name, input_img
-                )
+                # model_hijack.embedding_db.#recalculate_embedding_vector_by_name(
+                #    embedding_name, input_img
+                # )
                 cond = p.sd_model.get_learned_conditioning(p.batch_size * [p.prompt])
                 uncond = p.sd_model.get_learned_conditioning(
                     p.batch_size * [p.negative_prompt]
