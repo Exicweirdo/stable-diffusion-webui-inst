@@ -14,7 +14,7 @@ def create_embedding(name, initialization_text, nvpt, overwrite_old, embedding_t
     else:
         raise ValueError(f"Unknown embedding type {embedding_type}, must be 'classical' or 'InST'")
 
-    sd_hijack.model_hijack.embedding_db.load_textual_inversion_embeddings()
+    sd_hijack.model_hijack.embedding_db.load_textual_inversion_embeddings(force_reload=True)
 
     return gr.Dropdown.update(choices=sorted(sd_hijack.model_hijack.embedding_db.word_embeddings.keys())), f"Created: {filename}", ""
 
