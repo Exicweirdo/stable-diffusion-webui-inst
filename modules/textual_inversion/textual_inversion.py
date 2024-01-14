@@ -110,6 +110,7 @@ class EmbeddingWithAttention(Embedding):
             "sd_checkpoint": self.sd_checkpoint,
             "sd_checkpoint_name": self.sd_checkpoint_name,
             "embedding_attention": self.attentions.state_dict(),
+            "string_to_param": {"*": self.vec},
             "output_vec": self.vec,
         }
 
@@ -311,6 +312,19 @@ class EmbeddingDatabase:
 
         return None, None
 
+    def recalculate_embedding_vector_by_name(self, name, image, save = True):
+        embedding = self.word_embeddings.get(name, None)
+        if not embedding:
+            print(f"Embedding {name} not found")
+            return None
+        imag_embed = shared.clipvision_model.encode(image.unsqueeze(0))
+        vec = embedding.vec.detach()
+        with torch.no_grad():
+            embedding.calculate_vec(imag_embed)
+        if not save:
+            embedding.vec = vec.detach()
+
+        return embedding
 
 def create_embedding(name, num_vectors_per_token, overwrite_old, init_text='*'):
     cond_model = shared.sd_model.cond_stage_model
@@ -579,7 +593,7 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
         embedding.vec.requires_grad = True
         optimizer = torch.optim.AdamW([embedding.vec], lr=scheduler.learn_rate, weight_decay=0.0)
     else:
-        embedding.attentions.train()
+        embedding.train()
         optimizer = torch.optim.AdamW(embedding.attentions.parameters(), lr=scheduler.learn_rate, weight_decay=0.0)
         
     if shared.opts.save_optimizer_state:
@@ -802,11 +816,19 @@ Last saved image: {html.escape(last_saved_image)}<br/>
     return embedding, filename
 
 
-def save_embedding(embedding, optimizer, checkpoint, embedding_name, filename, remove_cached_checksum=True):
+def save_embedding(embedding, optimizer, checkpoint, embedding_name, filename, remove_cached_checksum=True, style_image_embed : torch.Tensor = None):
     old_embedding_name = embedding.name
     old_sd_checkpoint = embedding.sd_checkpoint if hasattr(embedding, "sd_checkpoint") else None
     old_sd_checkpoint_name = embedding.sd_checkpoint_name if hasattr(embedding, "sd_checkpoint_name") else None
     old_cached_checksum = embedding.cached_checksum if hasattr(embedding, "cached_checksum") else None
+    ##################################################
+    if isinstance(embedding, EmbeddingWithAttention):
+        if style_image_embed is not None:
+            with torch.no_grad():
+                embedding.eval()
+                embedding.calculate_vec(style_image_embed)
+            embedding.train()
+    ##################################################
     try:
         embedding.sd_checkpoint = checkpoint.shorthash
         embedding.sd_checkpoint_name = checkpoint.model_name
