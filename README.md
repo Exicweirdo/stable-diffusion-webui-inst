@@ -1,3 +1,45 @@
+# Stable Diffusion web UI with InST 
+
+This is a fork of the Stable Diffusion web UI with "Inversion-Based Style Transfer with Diffusion Models" ([InST](https://arxiv.org/abs/2211.13203v3)) implmented. The project is the final assignment of the course "Machine Learning and its Application in Chemistry" at Peking University, 2023 Fall. The report of the project is available in the repo as `report.pdf`.
+
+## Code Structure
+We implemented the algorithm by adapting the original code of Stable Diffusion web UI as well as adding new scripts and extensions. The changed files are listed below, grouped by their functions.
+```bash
+.
+├── extensions
+│   └── InST (added, for ui for calculate embedding vector)
+├── modules
+│   ├── attention.py (added, implementation of attention block)
+│   ├── sd_hijack_clip.py (hijack texual inversion embedding into prompts)
+│   ├── sd_hijack.py (hijack texual inversion embedding into prompts)
+│   ├── textual_inversion
+│   │   ├── attnmodel.py (added, main texual inversion model and CLIPVision encoder)
+│   │   ├── dataset.py (slightly modified)
+│   │   ├── textual_inversion.py (modified)
+│   │   ├── ui.py (modified)
+│   │   └── ...
+│   ├── ui.py (modified, for training)
+│   └── ...
+├── scripts
+│   ├── stochastic_inversion.py (added, implementation of stochastic inversion with its ui)
+│   └── ...
+└── ...
+```
+
+## Contribution
+- Sihan Wang and Xiaoxuan Yu are authors of the codebase and collaborate on the coding part, including the ananlysis of original code and the algorithm (with Hongfei Wu), the reimplementation of the algorithm and the integration into the web UI.
+    - [Sihan Wang](https://github.com/Exicweirdo) implemented the textual inversion model and hijacked it into the workflow of the web UI.
+    - [Xiaoxuan Yu](https://github.com/xiaoxuan-yu) implemented the remaining parts, including stochastic inversion script and the frontend of the implemented algorithm. 
+- Xiangyu Tan and Xinxuan Li collected, cleansed and labeled the dataset of style images and content images for training and inference.
+- The experiments are done by [Hongfei Wu](https://github.com/Navantock) and Yunjia Yang. They trained the model and conducted the experiments on the web UI.
+
+The report is mainly written by xxx and xxx, with the help of all the other members.
+
+
+--------
+
+The original README is as follows.
+
 # Stable Diffusion web UI
 A browser interface based on Gradio library for Stable Diffusion.
 
