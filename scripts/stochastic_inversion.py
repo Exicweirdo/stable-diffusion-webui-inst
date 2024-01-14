@@ -52,6 +52,8 @@ Cached = namedtuple(
         "cfg_scale",
         "strength",
         "latent",
+        "original_prompt",
+        "original_negative_prompt",
     ],
 )
 
@@ -104,13 +106,19 @@ class Script(scripts.Script):
             value=0.0,
             elem_id=self.elem_id("stochastic_inversion_randomness"),
         )
-
+        
+        override_prompt = gr.Checkbox(label="Use different original prompts (and negative prompts) in Stochastic inversion adding noise", value=True, elem_id=self.elem_id("override_prompt"))
+        original_prompt = gr.Textbox(label="Original prompt", lines=1, elem_id=self.elem_id("original_prompt"))
+        original_negative_prompt = gr.Textbox(label="Original negative prompt", lines=1, elem_id=self.elem_id("original_negative_prompt"))
+        
+        
         return [
             info,
             override_sampler,
             strength,
             cfg,
             randomness,
+            override_prompt, original_prompt, original_negative_prompt,
         ]
 
     def run(
@@ -121,6 +129,7 @@ class Script(scripts.Script):
         strength,
         cfg,
         randomness,
+        override_prompt, original_prompt, original_negative_prompt,
     ):
         # Override
         if override_sampler:
@@ -140,6 +149,8 @@ class Script(scripts.Script):
                 self.cache is not None
                 and self.cache.cfg_scale == cfg
                 and self.cache.strength == strength
+                and self.cache.original_prompt == original_prompt
+                and self.cache.original_negative_prompt == original_negative_prompt
             )
             same_everything = (
                 same_params
@@ -154,9 +165,16 @@ class Script(scripts.Script):
                 # model_hijack.embedding_db.#recalculate_embedding_vector_by_name(
                 #    embedding_name, input_img
                 # )
-                cond = p.sd_model.get_learned_conditioning(p.batch_size * [p.prompt])
+                if override_prompt:
+                    prompt = original_prompt
+                    negative_prompt = original_negative_prompt
+                else:
+                    prompt = p.prompt
+                    negative_prompt = p.negative_prompt
+                    
+                cond = p.sd_model.get_learned_conditioning(p.batch_size * [prompt])
                 uncond = p.sd_model.get_learned_conditioning(
-                    p.batch_size * [p.negative_prompt]
+                    p.batch_size * [negative_prompt]
                 )
                 rec_noise = find_noise_for_image(p, cond, uncond, cfg, strength)
                 self.cache = Cached(
@@ -164,6 +182,8 @@ class Script(scripts.Script):
                     cfg,
                     strength,
                     lat,
+                    original_prompt,
+                    original_negative_prompt,
                 )
 
             rand_noise = processing.create_random_tensors(
