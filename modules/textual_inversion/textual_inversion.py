@@ -317,13 +317,15 @@ class EmbeddingDatabase:
         if not embedding:
             print(f"Embedding {name} not found")
             return None
+        assert isinstance(embedding, EmbeddingWithAttention), "embedding is not InST embedding"
         imag_embed = shared.clipvision_model.encode(image.unsqueeze(0))
         vec = embedding.vec.detach()
         with torch.no_grad():
+            embedding.eval()
             embedding.calculate_vec(imag_embed)
-        if not save:
-            embedding.vec = vec.detach()
-
+        if save:
+            filename = os.path.join(shared.cmd_opts.embeddings_dir, f'{name}.pt')
+            embedding.save(filename)
         return embedding
 
 def create_embedding(name, num_vectors_per_token, overwrite_old, init_text='*'):
