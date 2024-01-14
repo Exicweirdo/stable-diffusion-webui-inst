@@ -127,13 +127,6 @@ class Script(scripts.Script):
                 label="Calculate embedding vector",
                 elem_id=self.elem_id("calc_vec"),
             )
-            embedding_vec = None
-            calc_vec.click(
-                model_hijack.embedding_db.recalculate_embedding_vector_by_name,
-                inputs=[embedding_name, input_img],
-                outputs=[embedding_vec],
-                show_progress=False,
-            )
 
         return [
             info,
@@ -143,6 +136,7 @@ class Script(scripts.Script):
             randomness,
             input_img,
             embedding_name,
+            calc_vec
         ]
 
     def run(
@@ -153,10 +147,22 @@ class Script(scripts.Script):
         strength,
         cfg,
         randomness,
+        input_img,
+        embedding_name,
+        calc_vec,
     ):
         # Override
         if override_sampler:
             p.sampler_name = "Euler"
+        embedding_vec = None
+        """calc_vec.click(
+            model_hijack.embedding_db.recalculate_embedding_vector_by_name,
+            inputs=[embedding_name, input_img],
+            outputs=[embedding_vec],
+            show_progress=False,
+        )"""
+        input_img = torch.from_numpy(input_img) / 255.0
+        model_hijack.embedding_db.recalculate_embedding_vector_by_name(embedding_name, input_img)
 
         def sample_extra(
             conditioning,
@@ -173,7 +179,8 @@ class Script(scripts.Script):
                 and self.cache.cfg_scale == cfg
                 and self.cache.strength == strength
                 and self.cache.embedding_name == embedding_name
-                and self.cache.input_img == input_img
+                and self.cache.input_img.shape == input_img.shape
+                and np.abs(self.cache.input_img - input_img).sum() < 100
             )
             same_everything = (
                 same_params
@@ -198,6 +205,9 @@ class Script(scripts.Script):
                     cfg,
                     strength,
                     lat,
+                    input_img,
+                    embedding_name,
+                    embedding_vec,
                 )
 
             rand_noise = processing.create_random_tensors(
