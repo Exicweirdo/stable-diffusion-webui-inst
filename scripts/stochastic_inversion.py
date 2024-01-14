@@ -76,7 +76,7 @@ class Script(scripts.Script):
         override_sampler = gr.Checkbox(
             label="Override `Sampling method` to Euler?(this method is built for it)",
             value=True,
-            elem_id=self.elem_id("override_sampler"),
+            elem_id=self.elem_id("stochastic_inversion_override_sampler"),
         )
 
         strength = gr.Slider(
@@ -85,7 +85,7 @@ class Script(scripts.Script):
             maximum=1,
             step=0.01,
             value=0.4,
-            elem_id=self.elem_id("strength"),
+            elem_id=self.elem_id("stochastic_inversion_strength"),
         )
 
         cfg = gr.Slider(
@@ -94,7 +94,7 @@ class Script(scripts.Script):
             maximum=1.0,
             step=0.1,
             value=1.0,
-            elem_id=self.elem_id("cfg"),
+            elem_id=self.elem_id("stochastic_inversion_decode_cfg_scale"),
         )
         randomness = gr.Slider(
             label="Randomness",
@@ -102,7 +102,7 @@ class Script(scripts.Script):
             maximum=1.0,
             step=0.01,
             value=0.0,
-            elem_id=self.elem_id("randomness"),
+            elem_id=self.elem_id("stochastic_inversion_randomness"),
         )
 
         return [
@@ -121,9 +121,6 @@ class Script(scripts.Script):
         strength,
         cfg,
         randomness,
-        input_img,
-        embedding_name,
-        calc_vec,
     ):
         # Override
         if override_sampler:
@@ -143,9 +140,6 @@ class Script(scripts.Script):
                 self.cache is not None
                 and self.cache.cfg_scale == cfg
                 and self.cache.strength == strength
-                and self.cache.embedding_name == embedding_name
-                and self.cache.input_img.shape == input_img.shape
-                and np.abs(self.cache.input_img - input_img).sum() < 100
             )
             same_everything = (
                 same_params
@@ -170,9 +164,6 @@ class Script(scripts.Script):
                     cfg,
                     strength,
                     lat,
-                    input_img,
-                    embedding_name,
-                    embedding_vec,
                 )
 
             rand_noise = processing.create_random_tensors(
@@ -215,45 +206,3 @@ class Script(scripts.Script):
         processed = processing.process_images(p)
 
         return processed
-
-
-def on_ui_tabs():
-    with gr.Blocks(analytics_enabled=False) as ui_component:
-        input_img = gr.Image(
-            label="Input image",
-            sources=["upload", "clipboard"],
-            image_mode="RGB",
-            interactive=True,
-            elem_id=self.elem_id("input_img"),
-        )
-        with gr.Row():
-            embedding_name = gr.Dropdown(
-                label="Embedding",
-                elem_id=self.elem_id("embedding_name"),
-                choices=sorted(model_hijack.embedding_db.word_embeddings.keys()),
-            )
-            create_refresh_button(
-                embedding_name,
-                model_hijack.embedding_db.load_textual_inversion_embeddings,
-                lambda: {
-                    "choices": sorted(model_hijack.embedding_db.word_embeddings.keys())
-                },
-                self.elem_id("refresh_embedding_name"),
-            )
-        calc_vec = gr.Button(
-            label="Calculate embedding vector",
-            elem_id=self.elem_id("calc_vec"),
-        )
-        embedding_vec = None
-        input_img = torch.from_numpy(input_img) / 255.0
-        calc_vec.click(
-            model_hijack.embedding_db.recalculate_embedding_vector_by_name,
-            inputs=[embedding_name, input_img],
-            outputs=[embedding_vec],
-            show_progress=False,
-        )
-
-        return [(ui_component, "InST Embedding", "extension_template_tab")]
-
-
-script_callbacks.on_ui_tabs(on_ui_tabs)

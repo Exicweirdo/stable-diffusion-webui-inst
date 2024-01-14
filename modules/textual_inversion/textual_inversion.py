@@ -312,7 +312,7 @@ class EmbeddingDatabase:
 
         return None, None
 
-    def recalculate_embedding_vector_by_name(self, name, image, save = True):
+    def recalculate_embedding_vector_by_name(self, name, image, save = False):
         embedding = self.word_embeddings.get(name, None)
         if not embedding:
             print(f"Embedding {name} not found")
