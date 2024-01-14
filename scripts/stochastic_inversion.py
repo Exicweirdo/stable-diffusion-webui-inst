@@ -5,8 +5,11 @@ from tqdm import trange
 
 import modules.scripts as scripts
 import gradio as gr
+from modules.ui_common import create_refresh_button
 
 from modules import processing, shared, sd_samplers, sd_samplers_common
+
+from modules.sd_hijack import model_hijack
 
 import torch
 import k_diffusion as K
@@ -38,12 +41,7 @@ def find_noise_for_image(p, cond, uncond, cfg_scale, strength):
 
 Cached = namedtuple(
     "Cached",
-    [
-        "noise",
-        "cfg_scale",
-        "strength",
-        "latent",
-    ],
+    ["noise", "cfg_scale", "strength", "latent", "input_img", "embedding_name"],
 )
 
 
@@ -82,7 +80,7 @@ class Script(scripts.Script):
         cfg = gr.Slider(
             label="Decode CFG scale",
             minimum=0.0,
-            maximum=15.0,
+            maximum=1.0,
             step=0.1,
             value=1.0,
             elem_id=self.elem_id("cfg"),
@@ -95,6 +93,28 @@ class Script(scripts.Script):
             value=0.0,
             elem_id=self.elem_id("randomness"),
         )
+        input_img = gr.Image(
+            label="Input image",
+            sources=["upload", "clipboard"],
+            image_mode="RGB",
+            interactive=True,
+            elem_id=self.elem_id("input_img"),
+        )
+        embedding_name = gr.Dropdown(
+            label="Embedding",
+            elem_id="train_embedding",
+            choices=sorted(model_hijack.embedding_db.word_embeddings.keys()),
+        )
+        create_refresh_button(
+            embedding_name,
+            model_hijack.embedding_db.load_textual_inversion_embeddings,
+            lambda: {
+                "choices": sorted(
+                    sd_hijack.model_hijack.embedding_db.word_embeddings.keys()
+                )
+            },
+            "refresh_train_embedding_name",
+        )
 
         return [
             info,
@@ -102,6 +122,8 @@ class Script(scripts.Script):
             strength,
             cfg,
             randomness,
+            input_img,
+            embedding_name,
         ]
 
     def run(
@@ -131,6 +153,8 @@ class Script(scripts.Script):
                 self.cache is not None
                 and self.cache.cfg_scale == cfg
                 and self.cache.strength == strength
+                and self.cache.embedding_name == embedding_name
+                and self.cache.input_img == input_img
             )
             same_everything = (
                 same_params
@@ -142,9 +166,10 @@ class Script(scripts.Script):
                 rec_noise = self.cache.noise
             else:
                 shared.state.job_count += 1
-                cond = p.sd_model.get_learned_conditioning(
-                    p.batch_size * [p.prompt]
+                model_hijack.embedding_db.recalculate_embedding_vector_by_name(
+                    embedding_name, input_img
                 )
+                cond = p.sd_model.get_learned_conditioning(p.batch_size * [p.prompt])
                 uncond = p.sd_model.get_learned_conditioning(
                     p.batch_size * [p.negative_prompt]
                 )
