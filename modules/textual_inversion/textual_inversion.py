@@ -142,7 +142,7 @@ class EmbeddingWithAttention(Embedding):
         self.vec = torch.concat([attention(image_embeds).unsqueeze(1) for attention in self.attentions], dim=1)
         return self.vec """
     def calculate_vec(self, image_embeds : torch.Tensor):
-
+        #image_embeds [bx768]
         self.vec = torch.cat([
             attention(image_embeds.unsqueeze(1)) for attention in self.attentions
         ], dim=0).squeeze(1)
@@ -384,13 +384,34 @@ def create_embedding_with_attention(name, num_vectors_per_token, overwrite_old, 
 
 def create_embedding_from_data(data, name, filename='unknown embedding file', filepath=None):
     if 'string_to_param' in data:  # textual inversion embeddings
-        param_dict = data['string_to_param']
-        param_dict = getattr(param_dict, '_parameters', param_dict)  # fix for torch 1.12.1 loading saved file from torch 1.11
-        assert len(param_dict) == 1, 'embedding file has multiple terms in it'
-        emb = next(iter(param_dict.items()))[1]
-        vec = emb.detach().to(devices.device, dtype=torch.float32)
-        shape = vec.shape[-1]
-        vectors = vec.shape[0]
+        ###########################################################
+        if "embedding_attention" in data: # textual inversion embeddings with attention
+            param_dict = data['embedding_attention']
+            vec = data["output_vec"].detach().to(devices.device, dtype=torch.float32)
+            shape = vec.shape[-1]
+            vectors = vec.shape[0]
+            embedding = EmbeddingWithAttention(vec, name)
+            embedding.attentions.load_state_dict(param_dict)
+            embedding.step = data.get('step', None)
+            embedding.sd_checkpoint = data.get('sd_checkpoint', None)
+            embedding.sd_checkpoint_name = data.get('sd_checkpoint_name', None)
+            embedding.vectors = vectors
+            embedding.shape = shape
+            if filepath:
+                embedding.filename = filepath
+                embedding.set_hash(hashes.sha256(filepath, "textual_inversion/" + name) or '')
+            print("creat InST embedding from data")
+            return embedding
+        ###########################################################
+        else:
+            param_dict = data['string_to_param']
+            param_dict = getattr(param_dict, '_parameters', param_dict)  # fix for torch 1.12.1 loading saved file from torch 1.11
+            assert len(param_dict) == 1, 'embedding file has multiple terms in it'
+            emb = next(iter(param_dict.items()))[1]
+            vec = emb.detach().to(devices.device, dtype=torch.float32)
+            shape = vec.shape[-1]
+            vectors = vec.shape[0]
+            
     elif type(data) == dict and 'clip_g' in data and 'clip_l' in data:  # SDXL embedding
         vec = {k: v.detach().to(devices.device, dtype=torch.float32) for k, v in data.items()}
         shape = data['clip_g'].shape[-1] + data['clip_l'].shape[-1]
@@ -404,25 +425,7 @@ def create_embedding_from_data(data, name, filename='unknown embedding file', fi
         vec = emb.detach().to(devices.device, dtype=torch.float32)
         shape = vec.shape[-1]
         vectors = vec.shape[0]
-    ###########################################################
-    elif "embedding_attention" in data: # textual inversion embeddings with attention
-        param_dict = data['embedding_attention']
-        vec = data["output_vec"].detach().to(devices.device, dtype=torch.float32)
-        shape = vec.shape[-1]
-        vectors = vec.shape[0]
-        embedding = EmbeddingWithAttention(vec, name)
-        embedding.attentions.load_state_dict(param_dict)
-        embedding.step = data.get('step', None)
-        embedding.sd_checkpoint = data.get('sd_checkpoint', None)
-        embedding.sd_checkpoint_name = data.get('sd_checkpoint_name', None)
-        embedding.vectors = vectors
-        embedding.shape = shape
-        if filepath:
-            embedding.filename = filepath
-            embedding.set_hash(hashes.sha256(filepath, "textual_inversion/" + name) or '')
-        #print("creat InST embedding from data")
-        return embedding
-    ###########################################################
+
     else:
         raise Exception(f"Couldn't identify {filename} as neither textual inversion embedding nor diffuser concept.")
 
@@ -574,7 +577,12 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
 
     pin_memory = shared.opts.pin_memory
     #prepare dataset
-    ds = modules.textual_inversion.dataset.PersonalizedBase(data_root=data_root, width=training_width, height=training_height, repeats=shared.opts.training_image_repeats_per_epoch, placeholder_token=embedding_name, model=shared.sd_model, cond_model=shared.sd_model.cond_stage_model, device=devices.device, template_file=template_file, batch_size=batch_size, gradient_step=gradient_step, shuffle_tags=shuffle_tags, tag_drop_out=tag_drop_out, latent_sampling_method=latent_sampling_method, varsize=varsize, use_weight=use_weight)
+    if not isinstance(embedding, EmbeddingWithAttention):
+        clipvision_model = None
+        print("embedding is not InST embedding")
+    else:
+        clipvision_model = shared.clipvision_model
+    ds = modules.textual_inversion.dataset.PersonalizedBase(data_root=data_root, width=training_width, height=training_height, repeats=shared.opts.training_image_repeats_per_epoch, placeholder_token=embedding_name, model=shared.sd_model, cond_model=shared.sd_model.cond_stage_model, device=devices.device, template_file=template_file, batch_size=batch_size, gradient_step=gradient_step, shuffle_tags=shuffle_tags, tag_drop_out=tag_drop_out, latent_sampling_method=latent_sampling_method, varsize=varsize, use_weight=use_weight, clipvision_model=clipvision_model)
 
     if shared.opts.save_training_settings_to_txt:
         save_settings_to_file(log_directory, {**dict(model_name=checkpoint.model_name, model_hash=checkpoint.shorthash, num_of_dataset_images=len(ds), num_vectors_per_token=len(embedding.vec)), **locals()})
@@ -653,10 +661,13 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
                     #######################################
                     if isinstance(embedding, EmbeddingWithAttention):
                         #print("pixel values.shape: ", batch.pixel_values.shape)
-                        imgs = batch.pixel_values.to(devices.device, non_blocking=pin_memory)
-                        styleimg = imgs[0]
-                        img_embed = shared.clipvision_model.encode(styleimg.unsqueeze(0))
+                        #imgs = batch.pixel_values.to(devices.device, non_blocking=pin_memory)
+                        #styleimg = imgs[0]
+                        #img_embed = shared.clipvision_model.encode(styleimg.unsqueeze(0))
+                        img_embed = batch.image_embeddings[0].unsqueeze(0).to(devices.device, non_blocking=pin_memory)
                         embedding.calculate_vec(img_embed)
+                    else:
+                        img_embed = None
                     #######################################
                     x = batch.latent_sample.to(devices.device, non_blocking=pin_memory)
                     if use_weight:
@@ -708,7 +719,9 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
                     # Before saving, change name to match current checkpoint.
                     embedding_name_every = f'{embedding_name}-{steps_done}'
                     last_saved_file = os.path.join(embedding_dir, f'{embedding_name_every}.pt')
-                    save_embedding(embedding, optimizer, checkpoint, embedding_name_every, last_saved_file, remove_cached_checksum=True)
+                    if isinstance(embedding, EmbeddingWithAttention):
+                        img_embed = img_embed.float()
+                    save_embedding(embedding, optimizer, checkpoint, embedding_name_every, last_saved_file, remove_cached_checksum=True, style_image_embed=img_embed)
                     embedding_yet_to_be_embedded = True
 
                 write_loss(log_directory, "textual_inversion_loss.csv", embedding.step, steps_per_epoch, {
@@ -783,8 +796,11 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
                         footer_right = f'{vectorSize}v {steps_done}s'
 
                         captioned_image = caption_image_overlay(image, title, footer_left, footer_mid, footer_right)
+                        print("caption overlay")
+                        if isinstance(embedding, EmbeddingWithAttention):
+                            data.pop("embedding_attention")
                         captioned_image = insert_image_data_embed(captioned_image, data)
-
+                        print("insert image data embed")
                         captioned_image.save(last_saved_image_chunks, "PNG", pnginfo=info)
                         embedding_yet_to_be_embedded = False
 
@@ -803,7 +819,9 @@ Last saved image: {html.escape(last_saved_image)}<br/>
 </p>
 """
         filename = os.path.join(shared.cmd_opts.embeddings_dir, f'{embedding_name}.pt')
-        save_embedding(embedding, optimizer, checkpoint, embedding_name, filename, remove_cached_checksum=True)
+        if isinstance(embedding, EmbeddingWithAttention):
+            img_embed = img_embed.float()
+        save_embedding(embedding, optimizer, checkpoint, embedding_name, filename, remove_cached_checksum=True, style_image_embed=img_embed)
     except Exception:
         errors.report("Error training embedding", exc_info=True)
     finally:

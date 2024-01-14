@@ -19,7 +19,7 @@ re_numbers_at_start = re.compile(r"^[-\d]+\s*")
 
 
 class DatasetEntry:
-    def __init__(self, filename=None, filename_text=None, latent_dist=None, latent_sample=None, cond=None, cond_text=None, pixel_values=None, weight=None):
+    def __init__(self, filename=None, filename_text=None, latent_dist=None, latent_sample=None, cond=None, cond_text=None, pixel_values=None, weight=None, image_embeddings=None):
         self.filename = filename
         self.filename_text = filename_text
         self.weight = weight
@@ -28,10 +28,11 @@ class DatasetEntry:
         self.cond = cond
         self.cond_text = cond_text
         self.pixel_values = pixel_values
+        self.image_embeddings = image_embeddings
 
 
 class PersonalizedBase(Dataset):
-    def __init__(self, data_root, width, height, repeats, flip_p=0.5, placeholder_token="*", model=None, cond_model=None, device=None, template_file=None, include_cond=False, batch_size=1, gradient_step=1, shuffle_tags=False, tag_drop_out=0, latent_sampling_method='once', varsize=False, use_weight=False):
+    def __init__(self, data_root, width, height, repeats, flip_p=0.5, placeholder_token="*", model=None, cond_model=None, device=None, template_file=None, include_cond=False, batch_size=1, gradient_step=1, shuffle_tags=False, tag_drop_out=0, latent_sampling_method='once', varsize=False, use_weight=False, clipvision_model = None):
         re_word = re.compile(shared.opts.dataset_filename_word_regex) if shared.opts.dataset_filename_word_regex else None
 
         self.placeholder_token = placeholder_token
@@ -132,6 +133,8 @@ class PersonalizedBase(Dataset):
                     entry.cond = cond_model([entry.cond_text]).to(devices.cpu).squeeze(0)
             groups[image.size].append(len(self.dataset))
             entry.pixel_values = torchdata #add to calc vec for EmbeddingWithAttention
+            if clipvision_model is not None:
+                entry.image_embeddings = clipvision_model.encode(torchdata.unsqueeze(0))
             self.dataset.append(entry)
             del torchdata
             del latent_dist
@@ -223,6 +226,8 @@ class BatchLoader:
         self.cond = [entry.cond for entry in data]
         self.latent_sample = torch.stack([entry.latent_sample for entry in data]).squeeze(1)
         self.pixel_values = torch.stack([entry.pixel_values for entry in data]).squeeze(1)
+        if all(entry.image_embeddings is not None for entry in data):
+            self.image_embeddings = torch.stack([entry.image_embeddings for entry in data]).squeeze(1)
         if all(entry.weight is not None for entry in data):
             self.weight = torch.stack([entry.weight for entry in data]).squeeze(1)
         else:
