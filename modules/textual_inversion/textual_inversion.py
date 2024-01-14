@@ -379,6 +379,7 @@ def create_embedding_with_attention(name, num_vectors_per_token, overwrite_old, 
 
     embedding = EmbeddingWithAttention(vec, name)
     embedding.step = 0
+    print("embedding step:", embedding.step)
     embedding.save(fn)
 
     return fn
