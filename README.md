@@ -1,6 +1,6 @@
 # Stable Diffusion web UI with InST 
 
-This is a fork of the Stable Diffusion web UI with "Inversion-Based Style Transfer with Diffusion Models" ([InST](https://arxiv.org/abs/2211.13203v3)) implmented. The project is the final assignment of the course "Machine Learning and its Application in Chemistry" at Peking University, 2023 Fall. The report of the project is available in the repo as `report.pdf`.
+This is a fork of the Stable Diffusion web UI with "Inversion-Based Style Transfer with Diffusion Models" ([InST](https://arxiv.org/abs/2211.13203v3)) implmented. The project is the final assignment of the course "Machine Learning and its Application in Chemistry" at Peking University, 2023 Fall.
 
 ## How to use
 The usage of stable diffusion webui itself can be referred to the [original README](#stable-diffusion-web-ui). This part describes the usage of the implemented algorithm.
