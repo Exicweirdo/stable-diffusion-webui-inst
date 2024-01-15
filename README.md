@@ -54,7 +54,7 @@ We implemented the algorithm by adapting the original code of Stable Diffusion w
 - Xiangyu Tan and Xinxuan Li collected, cleansed and labeled the dataset of style images and content images for training and inference.
 - The experiments are done by [Hongfei Wu](https://github.com/Navantock) and Yunjia Yang. They trained the model and conducted the experiments on the web UI.
 
-The report is mainly written by xxx and xxx, with the help of all the other members.
+The report is written by all the authors, Sihan Wang, Xiaoxuan Yu and Hongfei Wu mainly worked on the method and implementation part, while Xinxuan Li, Xiangyu Tan and Yunjia Yang mainly worked on the experiment part.
 
 ## Appendix
 Some commonly used hyperparms in training is listed as below for reference.
