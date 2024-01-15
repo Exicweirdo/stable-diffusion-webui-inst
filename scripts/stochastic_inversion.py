@@ -106,19 +106,36 @@ class Script(scripts.Script):
             value=0.0,
             elem_id=self.elem_id("stochastic_inversion_randomness"),
         )
-        
-        override_prompt = gr.Checkbox(label="Use different original prompts (and negative prompts) in Stochastic inversion adding noise", value=True, elem_id=self.elem_id("override_prompt"))
-        original_prompt = gr.Textbox(label="Original prompt", lines=1, elem_id=self.elem_id("original_prompt"))
-        original_negative_prompt = gr.Textbox(label="Original negative prompt", lines=1, elem_id=self.elem_id("original_negative_prompt"))
-        
-        
+        override_strength = gr.Checkbox(
+            label="Override `Denoising strength`?",
+            value=True,
+            elem_id=self.elem_id("stochastic_inversion_override_strength"),
+        )
+
+        override_prompt = gr.Checkbox(
+            label="Use different original prompts (and negative prompts) in Stochastic inversion adding noise",
+            value=True,
+            elem_id=self.elem_id("override_prompt"),
+        )
+        original_prompt = gr.Textbox(
+            label="Original prompt", lines=1, elem_id=self.elem_id("original_prompt")
+        )
+        original_negative_prompt = gr.Textbox(
+            label="Original negative prompt",
+            lines=1,
+            elem_id=self.elem_id("original_negative_prompt"),
+        )
+
         return [
             info,
             override_sampler,
             strength,
             cfg,
             randomness,
-            override_prompt, original_prompt, original_negative_prompt,
+            override_prompt,
+            original_prompt,
+            original_negative_prompt,
+            override_strength,
         ]
 
     def run(
@@ -129,11 +146,16 @@ class Script(scripts.Script):
         strength,
         cfg,
         randomness,
-        override_prompt, original_prompt, original_negative_prompt,
+        override_prompt,
+        original_prompt,
+        original_negative_prompt,
+        override_strength,
     ):
         # Override
         if override_sampler:
             p.sampler_name = "Euler"
+        if override_strength:
+            p.denoising_strength = strength
 
         def sample_extra(
             conditioning,
@@ -171,7 +193,7 @@ class Script(scripts.Script):
                 else:
                     prompt = p.prompt
                     negative_prompt = p.negative_prompt
-                    
+
                 cond = p.sd_model.get_learned_conditioning(p.batch_size * [prompt])
                 uncond = p.sd_model.get_learned_conditioning(
                     p.batch_size * [negative_prompt]

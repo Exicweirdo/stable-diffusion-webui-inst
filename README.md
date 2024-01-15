@@ -2,6 +2,27 @@
 
 This is a fork of the Stable Diffusion web UI with "Inversion-Based Style Transfer with Diffusion Models" ([InST](https://arxiv.org/abs/2211.13203v3)) implmented. The project is the final assignment of the course "Machine Learning and its Application in Chemistry" at Peking University, 2023 Fall. The report of the project is available in the repo as `report.pdf`.
 
+## How to use
+The usage of stable diffusion webui itself can be referred to the [original README](#stable-diffusion-web-ui). This part describes the usage of the implemented algorithm.
+### Training of the texual inversion model
+The training can be done by using the `training` tab of the webui. First, an InST embedding model should be created by selecting `InST` in `embedding type` under `Create embedding` page.
+![Create Embedding](./create-embedding.png)
+Then, after migrating to `Train` tab, the training hyper parameters and the location of training dataset should be specified.
+![Training Hyperparms](./training-hyperparm.jpeg)
+The configurations related to hypernets do not affect the training of the embedding model. Therefore we do not need to specify them. The training process can be launched by simply clicking the `Training Embedding` button.
+### The generation of new images
+#### The calculation of embedding vectors
+Before generating new images, the embedding vectors of the style image should be calculated. This can be done by using the `InST Embedding` tab. Specify the name of embedding model and upload the style image, then click `Run` button will get the tings all done.
+![Calculating vector](vector.png)
+#### Text to image generation
+For text to image generation, the texual inversion can be selected in `Texual Inversion` tab. By clicking the desired embedding file, the corresponding prompy will appears in the prompt box. Then, the generation can be launched by clicking the `Generate` button.
+![txt2img](txt2img.png)
+
+#### Image to image generation
+For image to image generation, the texual inversion part can be used similarly. The stochastic inversion is implemented as a script and can be selected in the `Script` dropdown.
+![img2img](./img2img.jpeg)
+The appeared scrollers, textboxs and checkboxs allowes the user to specify the parameters of the stochastic inversion. The `Generate` button will launch the generation process.
+
 ## Code Structure
 We implemented the algorithm by adapting the original code of Stable Diffusion web UI as well as adding new scripts and extensions. The changed files are listed below, grouped by their functions.
 ```bash
