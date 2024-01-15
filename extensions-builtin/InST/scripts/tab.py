@@ -14,6 +14,7 @@ def on_ui_tabs():
             sources=["upload", "clipboard"],
             image_mode="RGB",
             interactive=True,
+            type = "pil",
             elem_id="InST_input_img",
         )
         with gr.Row():
@@ -37,7 +38,6 @@ def on_ui_tabs():
         #convert gr img to tensor
         
         def recalc_and_refresh(embedding_name, input_img):
-            input_img = torch.from_numpy(input_img) / 255.0
             model_hijack.embedding_db.recalculate_embedding_vector_by_name(
                 embedding_name, input_img, True
             )

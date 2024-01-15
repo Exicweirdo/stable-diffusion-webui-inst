@@ -1,6 +1,7 @@
 import os
 from collections import namedtuple
 from contextlib import closing
+from typing import List, Tuple
 
 import torch
 import tqdm
@@ -93,6 +94,7 @@ class Embedding:
 class EmbeddingWithAttention(Embedding):
     def __init__(self, vec, name, step=None):
         super().__init__(vec, name, step)
+        self.imagesize : Tuple = (512, 512)
         self.attentions : ModuleList[Attentions] = None
         #CLIP tokenization
         self.is_clip = True
@@ -112,6 +114,7 @@ class EmbeddingWithAttention(Embedding):
             "embedding_attention": self.attentions.state_dict(),
             "string_to_param": {"*": self.vec},
             "output_vec": self.vec,
+            "imagesize": self.imagesize,
         }
 
         torch.save(embedding_data, filename)
@@ -143,9 +146,14 @@ class EmbeddingWithAttention(Embedding):
         return self.vec """
     def calculate_vec(self, image_embeds : torch.Tensor):
         #image_embeds [bx768]
+        #print("image_embeds: ", image_embeds[0, :10])
+        #print("self.vec: \n")
+        #print(self.vec[0, :10])
         self.vec = torch.cat([
             attention(image_embeds.unsqueeze(1)) for attention in self.attentions
         ], dim=0).squeeze(1)
+        #print("self.vec after: \n")
+        #print(self.vec[0, :10])
         #print("vec.shape: ", self.vec.shape)
         return self.vec
 #########################################################
@@ -312,13 +320,19 @@ class EmbeddingDatabase:
 
         return None, None
 
-    def recalculate_embedding_vector_by_name(self, name, image, save = False):
+    def recalculate_embedding_vector_by_name(self, name, image: Image, save = False):
         embedding = self.word_embeddings.get(name, None)
+        
+        image = image.convert("RGB").resize(embedding.imagesize, Image.LANCZOS)
+        npimage = np.array(image).astype(np.uint8)
+        npimage = (npimage / 127.5 - 1.0).astype(np.float32)
+        image = torch.from_numpy(npimage).permute(2,0,1).to(devices.device, dtype=torch.float32)
+        
         if not embedding:
             print(f"Embedding {name} not found")
             return None
         assert isinstance(embedding, EmbeddingWithAttention), "embedding is not InST embedding"
-        imag_embed = shared.clipvision_model.encode(image.unsqueeze(0))
+        imag_embed = shared.clipvision_model.encode(image.unsqueeze(0)) 
         vec = embedding.vec.detach()
         with torch.no_grad():
             embedding.eval()
@@ -400,6 +414,8 @@ def create_embedding_from_data(data, name, filename='unknown embedding file', fi
             embedding.sd_checkpoint_name = data.get('sd_checkpoint_name', None)
             embedding.vectors = vectors
             embedding.shape = shape
+            embedding.imagesize = data.get('imagesize', (512, 512))
+            
             if filepath:
                 embedding.filename = filepath
                 embedding.set_hash(hashes.sha256(filepath, "textual_inversion/" + name) or '')
@@ -605,6 +621,7 @@ def train_embedding(id_task, embedding_name, learn_rate, batch_size, gradient_st
         optimizer = torch.optim.AdamW([embedding.vec], lr=scheduler.learn_rate, weight_decay=0.0)
     else:
         embedding.train()
+        embedding.imagesize = (training_width, training_height)
         optimizer = torch.optim.AdamW(embedding.attentions.parameters(), lr=scheduler.learn_rate, weight_decay=0.0)
         
     if shared.opts.save_optimizer_state:
