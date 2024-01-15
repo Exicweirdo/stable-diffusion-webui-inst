@@ -56,6 +56,9 @@ We implemented the algorithm by adapting the original code of Stable Diffusion w
 
 The report is mainly written by xxx and xxx, with the help of all the other members.
 
+## Appendix
+Some commonly used hyperparms in training is listed as below for reference.
+![hyperparm](hyperparm.png)
 
 --------
 
