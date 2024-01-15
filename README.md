@@ -6,7 +6,7 @@ This is a fork of the Stable Diffusion web UI with "Inversion-Based Style Transf
 We implemented the algorithm by adapting the original code of Stable Diffusion web UI as well as adding new scripts and extensions. The changed files are listed below, grouped by their functions.
 ```bash
 .
-├── extensions
+├── extensions-builtin
 │   └── InST (added, for ui for calculate embedding vector)
 ├── modules
 │   ├── attention.py (added, implementation of attention block)

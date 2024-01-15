@@ -28,7 +28,7 @@ def find_noise_for_image(p, cond, uncond, cfg_scale, strength):
     t_enc = int(strength * 1000)
     t_enc = torch.tensor([t_enc], dtype=torch.long, device=x.device)
     x_noisy = shared.sd_model.q_sample(x_start=x_in, t=t_enc)
-    cond_in = torch.cat([uncond, cond])
+    cond_in = torch.cat([cond, uncond])
     image_conditioning = torch.cat([p.image_conditioning] * 2)
     cond_in = {"c_concat": [image_conditioning], "c_crossattn": [cond_in]}
     noise_combined = shared.sd_model.apply_model(x_noisy, t=t_enc, cond=cond_in)
